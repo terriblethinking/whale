@@ -1,4 +1,4 @@
-module whale
+module github.com/terriblethinking/engine
 
 go 1.26.4
 

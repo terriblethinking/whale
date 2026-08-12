@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"strings"
 
 	bifrost "github.com/maximhq/bifrost/core"
@@ -35,7 +36,7 @@ type Tools map[string]ToolFunc
 // the tool function (to be able to run the tool), the tool call
 // (for the MCP tools), and the chunk channel to be able to
 // communicate with the main go routine.
-func ToolManager(ctx schemas.BifrostContext, client *bifrost.Bifrost, tool ToolChunk, toolFunc ToolFunc, toolCall schemas.ChatAssistantMessageToolCall, chunkChan chan any) {
+func ToolManager(client *bifrost.Bifrost, tool ToolChunk, toolFunc ToolFunc, toolCall schemas.ChatAssistantMessageToolCall, chunkChan chan any) {
 
 	// Here we use the ApproveToolChan located inside the ToolChunk
 	// to wait for the the user to confirm (or reject) the tool.
@@ -53,7 +54,7 @@ func ToolManager(ctx schemas.BifrostContext, client *bifrost.Bifrost, tool ToolC
 			// but there is (currently) no other way that I have found.
 
 			if strings.Contains(tool.ToolName, "-") {
-				response, bifrostErr := client.ExecuteChatMCPTool(&ctx, &toolCall)
+				response, bifrostErr := client.ExecuteChatMCPTool(schemas.NewBifrostContext(context.Background(), schemas.NoDeadline), &toolCall)
 
 				if bifrostErr != nil {
 					chunkChan <- ToolFailedChunk{

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"slices"
 
 	bifrost "github.com/maximhq/bifrost/core"
@@ -62,15 +63,14 @@ func (a *Agent) Run(ctx schemas.BifrostContext, message string) (*schemas.Bifros
 
 // The RunAsync function is the engine of the agent loop.
 // Mostly everything happens in here.
-func (a *Agent) RunAsync(ctx schemas.BifrostContext, message string) <-chan any {
+func (a *Agent) RunAsync(message string) <-chan any {
 	chunkChan := make(chan any, 100)
 
 	// Run all agent stuff in a goroutine
 	// to make it async.
 	go func() {
-
 		// Start a stream with Bifrost, using the agent settings and history.
-		stream, err := a.Client.ChatCompletionStreamRequest(&ctx, &schemas.BifrostChatRequest{
+		stream, err := a.Client.ChatCompletionStreamRequest(schemas.NewBifrostContext(context.Background(), schemas.NoDeadline), &schemas.BifrostChatRequest{
 			Provider: a.Provider,
 			Model:    a.Model,
 			Input: append(a.Messages,
@@ -103,14 +103,14 @@ func (a *Agent) RunAsync(ctx schemas.BifrostContext, message string) <-chan any 
 
 					// If the stream content is basic reasoning or response
 					// text, return it to the client right away.
-					if choice.ChatStreamResponseChoice.Delta.Content != nil {
+					if choice.ChatStreamResponseChoice.Delta.Content != nil && *choice.ChatStreamResponseChoice.Delta.Content != "" {
 						content := *choice.ChatStreamResponseChoice.Delta.Content
 						chunkChan <- AsyncAgentTextChunk{
 							Content: content,
 						}
 					}
 
-					if choice.ChatStreamResponseChoice.Delta.Reasoning != nil {
+					if choice.ChatStreamResponseChoice.Delta.Reasoning != nil && *choice.ChatStreamResponseChoice.Delta.Reasoning != "" {
 						content := *choice.ChatStreamResponseChoice.Delta.Reasoning
 						chunkChan <- AsyncAgentReasongingChunk{
 							Content: content,
@@ -146,7 +146,7 @@ func (a *Agent) RunAsync(ctx schemas.BifrostContext, message string) <-chan any 
 								// with a reject or approval of the tool. Following
 								// that, it will then run the tool and return the
 								// result through chunkChan which we provided.
-								go ToolManager(ctx, &a.Client, toolChunk, a.Tools[*tool.Function.Name], tool, chunkChan)
+								go ToolManager(&a.Client, toolChunk, a.Tools[*tool.Function.Name], tool, chunkChan)
 
 								// After passing the tool into ToolManager, we can send
 								// it off to the client through chunkChan
@@ -189,7 +189,7 @@ func (a *Agent) RunAsync(ctx schemas.BifrostContext, message string) <-chan any 
 								// with a reject or approval of the tool. Following
 								// that, it will then run the tool and return the
 								// result through chunkChan which we provided.
-								go ToolManager(ctx, &a.Client, toolChunk, a.Tools[*tool.Function.Name], tool, chunkChan)
+								go ToolManager(&a.Client, toolChunk, a.Tools[*tool.Function.Name], tool, chunkChan)
 
 								// After passing the tool into ToolManager, we can send
 								// it off to the client through chunkChan
@@ -200,6 +200,8 @@ func (a *Agent) RunAsync(ctx schemas.BifrostContext, message string) <-chan any 
 				}
 			}
 		}
+
+		close(chunkChan)
 	}()
 
 	// Finally, we return chunkChan to the parent where
